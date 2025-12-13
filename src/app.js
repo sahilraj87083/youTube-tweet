@@ -13,21 +13,26 @@ app.use(cors({
     origin : process.env.CORS_ORIGIN,
     credentials : true
 }))
-
 // express.json middleware to parse json request body
 app.use(express.json({ // for parsing application/json
     limit : LIMIT
 }))
-
-
 app.use(cookieParser())
-
 app.use(urlencoded({ // for parsing application/x-www-form-urlencoded
     extended : true,
     limit : LIMIT
 }))
-
 app.use(express.static('public')) // for serving static files
 
+
+
+// import routes
+import userRouter from './routes/user.routes.js'
+
+
+
+// router declaration
+
+app.use('/api/v1/users', userRouter)
 
 export {app}
