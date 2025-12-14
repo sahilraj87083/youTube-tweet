@@ -65,7 +65,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
     let coverImageLocalPath;
     if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0){
-        coverImageLocalPath = req.files.coverImage[0].url 
+        coverImageLocalPath = req.files.coverImage[0].path
     }
     
 
@@ -122,6 +122,7 @@ const loginUser = asyncHandler(async (req, res) => {
     // send cookie
 
     const {username, email, password} = req.body
+    // console.log(email)
 
     if(!username && !email){
         throw new ApiError(400, "username or email is required")
@@ -165,9 +166,38 @@ const loginUser = asyncHandler(async (req, res) => {
     )
 })
 
+const logoutUser = asyncHandler(async (req, res) => {
+    // get the user
+    const user = User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $unset : {
+                refreshToken: 1 // this removes the field from document
+            }
+        },
+        {
+            new : true
+        }
+    )
+
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie('refreshToken', options)
+    .json(new ApiResponse(200, {}, "User logged Out"))
+})
+
+
+
 
 export {
     registerUser,
-    loginUser
+    loginUser,
+    logoutUser
 
 };
