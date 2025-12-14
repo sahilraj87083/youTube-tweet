@@ -302,6 +302,46 @@ const getCurrentUser = asyncHandler(async (req, res) => {
     ))
 })
 
+const updateAccountDetails = asyncHandler(async (req, res) => {
+    const {fullName, email} = req.body
+
+    if (!fullName || !email) {
+        throw new ApiError(400, "All fields are required")
+    }
+
+    // Check if new email already exists (except for current user) : Ensure email is unique across users
+    if (email) {
+        const existingEmail = await User.findOne({ email });
+
+        if (existingEmail && existingEmail._id.toString() !== req.user?._id.toString()) {
+            throw new ApiError(409, "Email already in use");
+        }
+    }
+
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set : {
+                fullName : fullName,
+                email : email
+            }
+        },
+        {
+            new : true
+        }
+    ).select('-password')
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Account details updated successfully"))
+})
+
 
 export {
     registerUser,
@@ -309,6 +349,7 @@ export {
     logoutUser,
     refreshAccessToken,
     changeCurrentPassword,
-    getCurrentUser
+    getCurrentUser,
+    updateAccountDetails
 
 };
