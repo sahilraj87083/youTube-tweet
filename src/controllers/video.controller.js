@@ -3,7 +3,7 @@ import { ApiError } from '../utils/ApiError.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import { User } from '../models/user.models.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
-import { uploadOnCloudinary } from '../utils/cloudinary.js'
+import { uploadOnCloudinary, deleteFromCloudinary } from '../utils/cloudinary.js'
 import mongoose, { isValidObjectId } from 'mongoose'
 
 const getAllVideos = asyncHandler( async (req, res) => {
@@ -107,8 +107,79 @@ const getAllVideos = asyncHandler( async (req, res) => {
      
 })
 
+const publishAVideo = asyncHandler(async (req, res) => {
+    const { title, description} = req.body
+    // TODO: get video, upload to cloudinary, create video
+
+    if([title, description].some((field) => !field || typeof field !== "string" || field?.trim() === '')){
+        throw new ApiError(400, "All fields are required");
+    }
+
+    const videoFileLocalPath = req.files?.videoFile[0]?.path;
+    const thumbnailLocalFilePath = req.files?.thumbnail[0]?.path;
+
+
+    if(!videoFileLocalPath){
+        throw new ApiError(400, "Video file is required");
+    }
+
+    if(!thumbnailLocalFilePath){
+        throw new ApiError(400, "Thumbnail file is required");
+    }
+
+    // upload on cloudinary
+
+    const videoFile = await uploadOnCloudinary(videoFileLocalPath);
+    const thumbnailFile = await uploadOnCloudinary(thumbnailLocalFilePath);
+
+    if (!videoFile || !thumbnailFile) {
+        throw new ApiError(500, "Error uploading media to Cloudinary");
+    }
+
+
+    // create video object - create entry in db
+    let video ;
+    
+    try {
+        video = await Video.create({
+            title,
+            description,
+            thumbnail : {
+                url : thumbnailFile.url,
+                public_id : thumbnailFile.public_id
+            },
+            videoFile : {
+                url : videoFile.url,
+                public_id : videoFile.public_id
+            },
+            duration : videoFile.duration,
+            owner : req.user?._id,
+            isPublished : false
+        })
+    } catch (error) {
+        await deleteFromCloudinary(thumbnailFile.public_id)
+        await deleteFromCloudinary(videoFile.public_id)
+        throw error
+    }
+
+    // get the uploaded video from the database
+
+    const uploadedVideo = await Video.findById(video._id)
+
+    if(!uploadedVideo){
+        throw new ApiError(500, "videoUpload failed please try again !!!");
+    }
+
+    return res
+        .status(201)
+        .json(new ApiResponse(201, uploadedVideo, "Video uploaded successfully"));
+
+})
 
 
 
+export {
+    getAllVideos,
+    publishAVideo
 
-export {getAllVideos}
+}
