@@ -40,6 +40,14 @@ const videoSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
             // required: true,
+        },
+        likesCount: {
+            type: Number,
+            default: 0
+        },
+        commentsCount: {
+            type: Number,
+            default: 0
         }
     }, { timestamps: true });
 
