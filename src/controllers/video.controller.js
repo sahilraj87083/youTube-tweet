@@ -194,14 +194,6 @@ const getVideoById = asyncHandler(async (req, res) => {
         },
         {
             $lookup : {
-                from : 'likes',
-                foreignField: 'video',
-                localField : '_id',
-                as : 'likes'
-            }
-        },
-        {
-            $lookup : {
                 from : 'users',
                 localField : 'owner',
                 foreignField : '_id',
@@ -239,15 +231,10 @@ const getVideoById = asyncHandler(async (req, res) => {
         },
         {
             $addFields : {
-                likesCount : {
-                    $size : '$likes',
-                },
                 owner : {
                     $first : '$owner'
-                },
-                isLiked : {
-                    $in : [req.user?._id, '$likes.likedBy']
                 }
+                
             }
         },
         {
@@ -261,7 +248,7 @@ const getVideoById = asyncHandler(async (req, res) => {
                 createdAt : 1,
                 owner : 1,
                 likesCount : 1,
-                isLiked : 1
+                commentsCount : 1
             }
         }
     ])
@@ -269,6 +256,12 @@ const getVideoById = asyncHandler(async (req, res) => {
     if(!video.length){
         throw new ApiError(404, "Video not found");
     }
+    
+    // ✅ isLiked (cheap & indexed)
+    const isLiked = await Like.exists({
+        video: videoId,
+        likedBy: req.user?._id
+    });
 
     // increment views if video fetched successfully
     await Video.findByIdAndUpdate(videoId, {
@@ -284,8 +277,16 @@ const getVideoById = asyncHandler(async (req, res) => {
         }
     });
 
+    
+
     return res.status(200).json(
-        new ApiResponse(200, video[0], "Video details fetched successfully")
+        new ApiResponse(
+            200, 
+            {
+                ...video[0],
+                isLiked: Boolean(isLiked)
+            }, 
+            "Video details fetched successfully")
     );
 })
 
