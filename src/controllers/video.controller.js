@@ -5,6 +5,7 @@ import { User } from '../models/user.models.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { uploadOnCloudinary, deleteFromCloudinary } from '../utils/cloudinary.js'
 import mongoose, { isValidObjectId } from 'mongoose'
+import { Like } from '../models/like.models.js'
 
 const getAllVideos = asyncHandler( async (req, res) => {
     //TODO: get all videos based on query, sort, pagination
@@ -357,11 +358,60 @@ const updateVideo = asyncHandler(async (req, res) => {
     );
 });
 
+const deleteVideo = asyncHandler(async (req, res) => {
+    const { videoId } = req.params
+    //TODO: delete video
 
+    if(!isValidObjectId(videoId)){
+        throw new ApiError(400, "Invalid videoId");
+    }
+
+    const video = await Video.findById(videoId);
+
+    if(!video){
+        throw new ApiError(404, "No video found");
+    }
+
+    if(req.user?._id.toString() !== video.owner.toString()){
+        throw new ApiError(
+            403,
+            "You can't delete this video as you are not the owner"
+        );
+    }
+
+    // delete the data on cloudinary
+    await deleteFromCloudinary(video.videoFile?.public_id);
+    await deleteFromCloudinary(video.thumbnail?.public_id);
+
+
+
+    const videoDeleted = await Video.findByIdAndDelete(videoId)
+
+    if (!videoDeleted) {
+        throw new ApiError(500, "Failed to delete the video please try again");
+    }
+
+
+    // delete video likes
+    await Like.deleteMany({
+        video : videoId
+    })
+
+    // delete video comments
+    await Comment.deleteMany({
+        video : videoId
+    })
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, {}, "Video deleted successfully"));
+})
 
 export {
     getAllVideos,
     publishAVideo,
-    getVideoById
+    getVideoById,
+    updateVideo,
+    deleteVideo
 
 }
