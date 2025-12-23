@@ -4,6 +4,7 @@ import {ApiError} from '../utils/ApiError.js'
 import {ApiResponse} from '../utils/ApiResponse.js'
 import {asyncHandler} from '../utils/asyncHandler.js'
 import {Video} from '../models/video.models.js'
+import { Like } from '../models/like.models.js'
 
 
 const getVideoComments = asyncHandler(async (req, res) => {
@@ -181,8 +182,54 @@ const updateComment = asyncHandler(async (req, res) => {
 })
 
 
+const deleteComment = asyncHandler(async (req, res) => {
+    // TODO: delete a comment
+    const {commentId} = req.params
+
+    if(!isValidObjectId(commentId)){
+        throw new ApiError(400, 'Invalid CommentId')
+    }
+
+    const comment = await Comment.findById(commentId);
+
+    if(!comment){
+        throw new ApiError(404, 'Comment not found')
+    }
+
+    if(comment.owner.toString() !== req.user?._id.toString()){
+        throw new ApiError(403, 'You are not allowed to delete the comment')
+    }
+
+    await Comment.findByIdAndDelete(commentId)
+
+    // delete the likes 
+    await Like.deleteMany({
+        comment : commentId,
+    })
+
+    // decrease the comment count
+
+    await Video.findByIdAndUpdate(comment.video,
+        {
+            $inc : {
+                commentsCount : -1
+            },
+            $max : {
+                commentsCount : 0
+            }
+        }
+    )
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(200, { commentId }, "Comment deleted successfully")
+        );
+})
+
 export {
     getVideoComments,
     addComment,
-    updateComment
+    updateComment,
+    deleteComment
 }
