@@ -166,37 +166,54 @@ const getUserChannelSubscribers = asyncHandler(async (req, res) => {
 const getSubscribedChannels = asyncHandler(async (req, res) => {
     const { subscriberId } = req.params
 
+    // 1. Validate subscriberId format
+    // Prevents MongoDB CastErrors and bad requests
     if(!isValidObjectId(subscriberId)){
         throw new ApiError(400, 'Invalid subscriberId');
     }
 
+     // 2. Ensure subscriber actually exists
+    // Avoids querying subscriptions for a non-existing user
     const subscriber = await User.findById(subscriberId)
     if (!subscriber) {
         throw new ApiError(404, "Subscriber not found")
     }
 
-
+    // 3. Aggregation pipeline to fetch subscribed channels
     const subscribedChannels = await Subscription.aggregate([
-        // 1. Match subscriptions for this channel
+        // ────────────────────────────────────────────────
+        // STAGE 1: Match subscriptions made by this user
+        // Purpose:
+        // "Which channels has this user subscribed to?"
         {
             $match : {
                 subscriber : new mongoose.Types.ObjectId(subscriberId)
             }
         },
-        // 2. Lookup channel user details
+        // ────────────────────────────────────────────────
+        // STAGE 2: Lookup channel (user) details
+        // Purpose:
+        // Replace channel ObjectId with full user profile
         {
             $lookup : {
                 from : 'users',
                 localField : 'channel',
                 foreignField : '_id',
                 as : 'subscribedChannel',
+
+                // Nested pipeline to fetch channel metadata
                 pipeline : [
+                    // ─────────────────────────────────────────
+                    // SUB-STAGE 2.1: Lookup latest published video
+                    // Purpose:
+                    // Fetch ONLY the most recent published video
                     {
                         $lookup : {
                             from : 'videos',
                             let : { channelId: "$_id" },
                             pipeline : [
                                 {
+                                    // Match videos owned by channel AND published
                                     $match : {
                                         $expr : {
                                             $and : [
@@ -206,12 +223,15 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
                                         }
                                     }
                                 },
+                                // Sort newest first
                                 {
                                     $sort: { createdAt: -1 }
                                 },
+                                // Limit to ONLY latest video
                                 {
                                     $limit: 1 // ONLY latest video
                                 },
+                                // Keep only fields needed by frontend
                                 {
                                     $project : {
                                         "videoFile.url" : 1,
@@ -229,11 +249,20 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
                             as : 'latestVideo'
                         }
                     },
+                    // ─────────────────────────────────────────
+                    // SUB-STAGE 2.2: Convert latestVideo array → object
+                    // Purpose:
+                    // $lookup always returns arrays
+                    // Frontend expects an object
                     {
                         $addFields: {
                             latestVideo: { $first: "$latestVideo" }
                         }
                     },
+                    // ─────────────────────────────────────────
+                    // SUB-STAGE 2.3: Shape channel response
+                    // Purpose:
+                    // Send only public-facing channel info
                     {
                         $project: {
                             username: 1,
@@ -245,9 +274,19 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
                 ]
             }
         },
+        // ────────────────────────────────────────────────
+        // STAGE 3: Unwind subscribedChannel array
+        // Purpose:
+        // Convert:
+        // subscribedChannel: [ {...} ]
+        // → subscribedChannel: { ... }
         { 
             $unwind: "$subscribedChannel" 
         },
+        // ────────────────────────────────────────────────
+        // STAGE 4: Final response shape
+        // Purpose:
+        // Remove unnecessary fields and return clean payload
         {
             $project: {
                 _id: 0,
