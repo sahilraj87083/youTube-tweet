@@ -174,6 +174,9 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
         {
             $pull : {
                 videos : videoId
+            },
+            $inc: { 
+                totalVideos: -1 
             }
         },
         {
